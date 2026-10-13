@@ -1,0 +1,11 @@
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+.env
+
+# Generated data and outputs
+/data/raw/*
+/data/processed/*
+/results/summaries/*
+/results/charts/*
