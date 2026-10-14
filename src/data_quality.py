@@ -1,9 +1,14 @@
 
 from pathlib import Path
 from collections import Counter
+from datetime import datetime, timezone
+import json
+
 import pandas as pd
 
 DATA_DIR = Path("data/raw")
+REPORT_DIR = Path("results/summaries")
+REPORT_PATH = REPORT_DIR / "data_quality_report.json"
 CHUNK_SIZE = 200_000
 
 total_rows = 0
@@ -22,22 +27,22 @@ for file_path in sorted(DATA_DIR.glob("*.csv")):
         file_rows += rows
         total_rows += rows
 
-        # Count missing values in each column
+        # Count missing values in each column.
         for column, count in chunk.isna().sum().items():
             missing_counts[column] += int(count)
 
-        # Count each event type
+        # Count event types.
         event_counts.update(
             chunk["event_type"].fillna("<MISSING>").astype(str)
         )
 
-        # Check whether price is numeric and non-negative
+        # Check for non-numeric or negative prices.
         prices = pd.to_numeric(chunk["price"], errors="coerce")
         invalid_price_count += int(
             (prices.isna() | (prices < 0)).sum()
         )
 
-        # Check event_time parsing
+        # Check event timestamp validity.
         parsed_times = pd.to_datetime(
             chunk["event_time"], errors="coerce", utc=True
         )
@@ -45,6 +50,24 @@ for file_path in sorted(DATA_DIR.glob("*.csv")):
 
     print(f"Rows processed: {file_rows:,}")
 
+# Prepare the report.
+report = {
+    "project": "TrendPulse",
+    "generated_at_utc": datetime.now(timezone.utc).isoformat(),
+    "total_rows_processed": total_rows,
+    "missing_values_by_column": dict(sorted(missing_counts.items())),
+    "event_type_counts": dict(event_counts.most_common()),
+    "invalid_or_negative_prices": invalid_price_count,
+    "invalid_event_timestamps": invalid_time_count,
+}
+
+# Save the report.
+REPORT_DIR.mkdir(parents=True, exist_ok=True)
+
+with REPORT_PATH.open("w", encoding="utf-8") as report_file:
+    json.dump(report, report_file, indent=4)
+
+# Display a readable summary.
 print("\n" + "=" * 50)
 print("DATA QUALITY REPORT")
 print("=" * 50)
@@ -60,3 +83,4 @@ for event, count in event_counts.most_common():
 
 print(f"\nInvalid or negative prices: {invalid_price_count:,}")
 print(f"Invalid event timestamps: {invalid_time_count:,}")
+print(f"\nJSON report saved to: {REPORT_PATH}")
